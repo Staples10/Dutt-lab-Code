@@ -1,3 +1,5 @@
+#See pitt duttlab github for code blueprint
+
 #Same as github code for SG384 Signal Generator but converted to use ethernet connection via socket
 import socket
 #import pyvisa as visa
