@@ -10,8 +10,6 @@ from src.Core.device import Device
 RANGE_MIN = 1012500000
 RANGE_MAX = 4050000000 #4.050 GHZ
 #Ip and port for ethernet connection
-_IP_ADDRESS_LAN = '169.254.146.198'     #IP needs set on device. Auto configurations should be disabled
-_PORT_LAN = 5025                        #port open for remote commmunication as per manual
 
 class MicrowaveGenerator(Device):
     """
@@ -22,7 +20,7 @@ class MicrowaveGenerator(Device):
     ## GD: watch out for the ports this might be different on each computer and might cause issues when running export default
     _DEFAULT_SETTINGS = Parameter([
         Parameter('connection_type', 'LAN', ['GPIB', 'RS232', 'LAN'], 'type of connection to open to controller'),
-        Parameter('port', 19, list(range(0, 31)), 'GPIB or COM port on which to connect'),
+        Parameter('port', 5025, int, 'GPIB or COM port or LAN port on which to connect'),
         Parameter('GPIB_num', 0, int, 'GPIB device on which to connect'),
         Parameter('ip_address','169.254.146.198',str,'ip address of signal generator'),
         Parameter('enable_output', False, bool, 'Type-N output enabled'),
@@ -39,25 +37,17 @@ class MicrowaveGenerator(Device):
         Parameter('mod_rate', 1e7, float, 'Rate of modulation [Hz]')
     ])
 
-    def __init__(self, name=None, settings=None, connection=None):
+    def __init__(self, name=None, settings=None):
 
         super(MicrowaveGenerator, self).__init__(name, settings)
         #super().__init__(name,settings)
         #if settings:
         #    self.update(settings)
-        '''Not sure how the settings work in the init. Code runs init of device class which seems to be
-        unnessesary. If you need to change values in dictionary during initlization use for loop which sets
-        desried values ie. Port, IP, Connection type, etc for the specific instance.
-        for key, value in settings.items():
-            self.settings[key] = value
-        '''
-        if connection:
-            self.settings['connection_type'] = connection
         # XXXXX MW ISSUE = START
         #===========================================
         # Issue where visa.ResourceManager() takes 4 minutes no longer happens after using pdb to debug (??? not sure why???)
         if self.settings['connection_type'] == 'LAN':
-            self.addr = (_IP_ADDRESS_LAN,_PORT_LAN)
+            self.addr = (settings['ip_address'],settings['port'])
             try:
                 self._lan_command('*IDN?')
             except (socket.error, socket.timeout) as e:
@@ -367,7 +357,7 @@ class RFGenerator(MicrowaveGenerator):
 
     _DEFAULT_SETTINGS = Parameter([
         Parameter('connection_type', 'LAN', ['GPIB', 'RS232', 'LAN'], 'type of connection to open to controller'),
-        Parameter('port', 19, list(range(0, 31)), 'GPIB or COM port on which to connect'),
+        Parameter('port', 5025, int, 'GPIB or COM port or LAN port on which to connect'),
         ## JG: what out for the ports this might be different on each computer and might cause issues when running export default
         Parameter('GPIB_num', 0, int, 'GPIB device on which to connect'),
         Parameter('ip_address', '169.254.146.198', str, 'ip address of signal generator'),
@@ -401,6 +391,6 @@ class RFGenerator(MicrowaveGenerator):
 
 if __name__ == '__main__':
 
-    mw = MicrowaveGenerator(connection='LAN')
+    mw = MicrowaveGenerator()
     print(mw.is_connected)
     print("Frequency is {} Hz".format(mw.read_probes('frequency')))
