@@ -4,10 +4,21 @@ from ctypes import *
 import os
 import sys
 
+'''
+To update for next version:
+ -Try to make less confusing maybe by having inlaid parameters for clock and mult_ax [see ni_daq.py on github for example]
+ -Update function MonitorN does not work. Might be issue with how im inputing value, but MonitorN is unreliable 
+    since read often triggers before write does. Maybe just get rid of and use Write and Read in the one update comomand
+ -Implement Error Dictionary
+ -Get is_connected property to work. In test it returned false even though you could write and read position data of axis
+ -New def for aquisition
+ -New def for pulse
+'''
+
 
 class MCL_NanoDrive(Device):
 
-    _DEFAULT_SETTINGS = Parameter([Parameter('serial',2850,int,'serial of specific Nano Drive. LP100:2849 & HS3:2850'),
+    _DEFAULT_SETTINGS = Parameter([Parameter('serial',2850,int,'serial of specific Nano Drive. Dutt labs LP100:2849 & HS3:2850'),
                                    Parameter('axis','x',['x','y','z','aux'],'axis of Nano Drive '),
                                    Parameter('axis_position',5.0,float,'position of axis in microns'),
                                    Parameter('read_rate',2.0,[0.267,0.5,1,2,10,17,20],
@@ -86,7 +97,7 @@ class MCL_NanoDrive(Device):
 
             if key == 'axis_position':      #updates axis position and returns value        #sometimes read happens before position chages so can be unreliable
                 self.DLL.MCL_MonitorN.restype = c_double
-                position = self.DLL.MonitorN(value,axis,self.handle) #sets position and return
+                position = self.DLL.MonitorN(c_double(value),axis,self.handle) #sets position and return
                 return position
 
             elif key == 'read_waveform':    #reads and returns waveform loaded on specified axis
@@ -209,7 +220,7 @@ class MCL_NanoDrive(Device):
         assert(self._settings_initialized)
         assert key in list(self._PROBES.keys())
         if axis:
-            self.settings['axis'] = self._axis_to_internal(axis)
+            self.settings['axis'] = axis
 
         if key == 'axis_range':
             self.DLL.MCL_GetCalibration.restype = c_double
@@ -246,6 +257,7 @@ class MCL_NanoDrive(Device):
         }
 
     @property
+    #does not work for some reason. When called returns false even if I can read and write to axes of nanodrive
     def is_connected(self):
         #true if connected, false if not
         self.DLL.MCL_DeviceAttached.restype = c_bool
@@ -289,7 +301,8 @@ class MCL_NanoDrive(Device):
         if value ==20:
             return c_double(9)
         else:
-            raise 'Read rate invalid. Check _Default_Settings for valid values.'
+            print('Read rate invalid. Check _Default_Settings for valid values.')
+            raise
 
     def _load_rate_check(self, value):
         #Value in milliseconds
