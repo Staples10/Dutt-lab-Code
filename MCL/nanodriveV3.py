@@ -73,7 +73,6 @@ class MCL_NanoDrive(Device):
         self._initilize_handle()
 
         self.empty_waveform = [0]       #arbitray empty waveform to be used in 'read_waveform':MCL_NanoDrive.empty_waveform. Proper size is created in appropriate method
-        self.load_waveform = [0]
         self.set_read_waveform = False  #setup status to false so that a trigger doesnt occur without a setup
         self.set_load_waveform = False
         self.set_mult_ax_waveform = False
@@ -120,17 +119,16 @@ class MCL_NanoDrive(Device):
                 ArrayType = c_double * self.settings['num_datapoints']  # creates empty array with correct number of datapoints
                 empty_waveform = ArrayType()
                 read_rate = self._read_rate_to_internal(self.settings['read_rate'])
-                value = self._check_error(self.DLL.MCL_ReadWaveFormN(axis,c_uint(self.settings['num_datapoints']),read_rate,byref(self.empty_waveform),self.handle))
-                self.read_waveform = list(empty_waveform)
-                return self.read_waveform
+                value = self._check_error(self.DLL.MCL_ReadWaveFormN(axis,c_uint(self.settings['num_datapoints']),read_rate,byref(empty_waveform),self.handle))
+                self.settings['read_waveform'] = list(empty_waveform)      #see if this works
+                return list(empty_waveform)
 
             elif key == 'load_waveform':    #loads waveform onto specified axis
                 if self.settings['num_datapoints'] != len(settings['load_waveform']):
                     print('Error: Length of wavefrom input list does not match number of data points')
                     raise
                 load_rate = self._load_rate_check(self.settings['load_rate'])
-                self.load_waveform = settings['load_waveform']
-                value = self._check_error(self.DLL.MCL_LoadWaveFromN(axis,c_uint(self.settings['num_datapoints']),load_rate,byref(self.load_waveform),self.handle))
+                value = self._check_error(self.DLL.MCL_LoadWaveFromN(axis,c_uint(self.settings['num_datapoints']),load_rate,byref(settings['load_waveform']),self.handle))
                 #To read loaded waveform use update(settings={'axis':'','read_waveform':MCL_NanoDrive.empty_waveform})
 
             elif key == 'mult_ax' and settings['mult_ax']['waveform'] == [[0],[0],[0]]:     #stops multi-axis waveform only if input value is 0 for all axis
@@ -153,17 +151,17 @@ class MCL_NanoDrive(Device):
                     print('Error: Length of wavefrom imput list does not match number of data points')
                     raise
                 load_rate = self._load_rate_check(self.settings['load_rate'])
-                self.load_waveform = settings['load_waveform']     #for read_probes to see last loaded waveform
-                value = self._check_error(self.DLL.MCL_Setup_LoadWaveFormN(axis,c_uint(self.settings['num_datapoints']),load_rate,byref(self.load_waveform),self.handle))
+                value = self._check_error(self.DLL.MCL_Setup_LoadWaveFormN(axis,c_uint(self.settings['num_datapoints']),load_rate,byref(settings['load_waveform']),self.handle))
                 self.set_load_waveform = True    #lets trigger_load and tirgger_acquisition run
 
             elif key == 'mult_ax':
-                self.load_waveform = self._multiaxis_waveform(settings['mult_ax']['waveform'])
-                if not self.settings['num_datapoints']==len(self.load_waveform[0])==len(self.load_waveform[1])==len(self.load_waveform[2]):
+                #might want to add something to ensure # of iterations is correct/inputed
+                load_waveform = self._multiaxis_waveform(settings['mult_ax']['waveform'])
+                if not self.settings['num_datapoints']==len(load_waveform[0])==len(load_waveform[1])==len(load_waveform[2]):
                     print('ERROR: Length of waveform input lists do not match number of data points. Note TOTAL number of data points is 6666.')
                     raise
                 #setup command looks confusing but the lengh is just from converting python variable types to c variable types
-                value = self._check_error(self.DLL.MCL_WfmaSetup(byref(self.load_waveform[0]), byref(self.load_waveform[1]), byref(self.load_waveform[2]), c_uint(self.settings['num_datapoints']), c_double(self.settings['load_rate']), c_ushort(self.settings['mult_ax']['iterations']), self.handle))
+                value = self._check_error(self.DLL.MCL_WfmaSetup(byref(load_waveform[0]), byref(load_waveform[1]), byref(load_waveform[2]), c_uint(self.settings['num_datapoints']), c_double(self.settings['load_rate']), c_ushort(self.settings['mult_ax']['iterations']), self.handle))
                 self.set_mult_ax_waveform = True
 
     def trigger(self, settings):
@@ -181,8 +179,7 @@ class MCL_NanoDrive(Device):
                     ArrayType = c_double * self.settings['num_datapoints']
                     empty_waveform = ArrayType()
                     value = self._check_error(self.DLL.MCL_Trigger_ReadWaveFormN(axis,c_uint(self.settings['num_datapoints']),byref(empty_waveform),self.handle))
-                    self.read_waveform = list(empty_waveform)
-                    return self.read_waveform
+                    return list(empty_waveform)
 
             elif key == 'load_waveform':
                 if not self.set_load_waveform:      #checks to see if load waveform has been set
@@ -213,10 +210,9 @@ class MCL_NanoDrive(Device):
             ArrayType = c_double * self.settings['num_datapoints']
             empty_waveform = ArrayType()  # creates empty array for read data
             value = self._check_error(self.DLL.MCL_TriggerWaveformAcquisition(axis, c_uint(self.settings['num_datapoints']),byref(empty_waveform), self.handle))
-            self.read_waveform = list(empty_waveform)
-            return self.read_waveform
+            return list(empty_waveform)
 
-    def clock_function(self, clock, polarity=None, mode=None, bind_to=None, reset=False, pulse=False):
+    def clock_functions(self, clock, polarity=None, mode=None, bind_to=None, reset=False, pulse=False):
         #updates clock settings by sending relevant commands to device. See _Default_Settings for polarity, mode, and binding options
         #input output=True for a 250 ns pulse on specified clock
         if reset:
@@ -241,7 +237,7 @@ class MCL_NanoDrive(Device):
                 value = self._check_error(self.DLL.MCL_IssBindClockToAxis(clock, c_int(polarity+2), bind_to_axis, self.handle))
                 self.settings['clock'][clock_name]['binding'] = bind_to
         if pulse:
-            value = self._check_error(getattr(self.DLL, f'MCL_{clock}Clock')(self.handle)) #getattr assembles the self.DLL+MCL_PixelClock+(self.handle)
+            value = self._check_error(getattr(self.DLL, f'MCL_{clock_name}Clock')(self.handle)) #getattr assembles the self.DLL+MCL_PixelClock+(self.handle)
         return None
 
     def read_probes(self, key, axis=None):
@@ -259,15 +255,14 @@ class MCL_NanoDrive(Device):
             value = self._check_error(self.DLL.MCL_SingleReadN(self._axis_to_internal(self.settings['axis']), self.handle))
 
         elif key == 'load_waveform':    #returns last loaded waveform or empty list if none loaded
-            value = self.load_waveform
+            value = self.settings['load_waveform']
         elif key == 'read_waveform':    #returns last read wavefrom or triggers waveform read on axis
             value = self.update(settings={'axis':self.settings['axis'],'read_waveform':self.empty_waveform})
             self.settings['read_waveform'] = value
         elif key == 'mult_ax_waveform':     #note read waits for mult_ax waveform to stop triggering and stops infinite loops
             empty_waveform = self._multiaxis_waveform([0], empty=True)
-            command = self._check_error(self.DLL.MCL_WfmaRead(byref(empty_waveform[0]),byref(empty_waveform[1]),byref(empty_waveform[2]),self.handle))
-            self.read_waveform = [list(empty_waveform[0]),list(empty_waveform[1]),list(empty_waveform[2])]
-            value = self.read_waveform
+            self._check_error(self.DLL.MCL_WfmaRead(byref(empty_waveform[0]),byref(empty_waveform[1]),byref(empty_waveform[2]),self.handle))
+            value = [list(empty_waveform[0]),list(empty_waveform[1]),list(empty_waveform[2])]
             #might want to add an exception to raise if num_datapoints is not equal to length of read data
             #or add self.wfma_numpoints to create proper sized arrays of last loaded waveform
 
@@ -293,7 +288,7 @@ class MCL_NanoDrive(Device):
             'read_rate':'rate to read waveform data',
             'load_rate':'rate to upload waveform data',
             'num_datapoints':'number of data points of waveform',
-            'clock_setting':'internal parameters of all clocks'
+            'clock_settings':'internal parameters of all clocks'
         }
 
     @property
