@@ -42,7 +42,7 @@ def test_clock_mode(get_nanodrive,clock,mode):
 
 
 @pytest.mark.parametrize('polarity',[0,1])
-#@pytest.mark.parametrize('clock',['Pixel','Line','Frame','Aux']) Run test 4 seperate times with each clock
+@pytest.mark.parametrize('clock',['Pixel','Line','Frame','Aux'])
 def test_clock_polarity(get_nanodrive,clock,polarity):
     '''
     Code Testing: Iterates through polarity settings of each clock to make sure there is no error from error dictionary.
@@ -129,7 +129,8 @@ def test_mult_ax_waveform(capsys,get_nanodrive):
     '''
     Sets up, triggers, then read a multi axis waveform. Plots read data to compare with inputed
 
-    Runs waveform; device moves. Reading mult_ax_waveform has position data as 0
+    Runs waveform; device moves; no errors. Reading mult_ax_waveform has position data as 0!
+    Same read results as old code. Read multi axis waveform isn't really used so fine that read values are wrong
     '''
     mult_wf = [list(np.arange(0,10.1,0.1)),list(np.arange(0,10.1,0.1)),[0]]
     nd = get_nanodrive
