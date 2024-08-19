@@ -1,28 +1,40 @@
+# Created by Gurudev Dutt <gdutt@pitt.edu> on 2023-08-02
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
 import pyvisa as visa
 import pyvisa.errors
 import socket
 
-#from src.Core import Parameter, Device      #note capitilization on core when trying to use on lab computers
-from src.Core.parameter import Parameter
-from src.Core.device import Device
+from src.core import Parameter, Device
 
 # RANGE_MIN = 2025000000 #2.025 GHz
 RANGE_MIN = 1012500000
 RANGE_MAX = 4050000000 #4.050 GHZ
-#Ip and port for ethernet connection
 
 class MicrowaveGenerator(Device):
     """
     This class implements the Stanford Research Systems SG384 microwave generator. The class commuicates with the
-    device over GPIB using pyvisa.
+    device over GPIB using pyvisa or LAN using socket.
     """
         # SHOULD BE 4
     ## GD: watch out for the ports this might be different on each computer and might cause issues when running export default
     _DEFAULT_SETTINGS = Parameter([
-        Parameter('connection_type', 'LAN', ['GPIB', 'RS232', 'LAN'], 'type of connection to open to controller'),
-        Parameter('port', 5025, int, 'GPIB or COM port or LAN port on which to connect'),
+        Parameter('connection_type', 'GPIB', ['GPIB', 'RS232', 'LAN'], 'type of connection to open to controller'),
+        Parameter('port', 5025, int, 'GPIB, COM, or LAN port on which to connect'),
         Parameter('GPIB_num', 0, int, 'GPIB device on which to connect'),
-        Parameter('ip_address','169.254.146.198',str,'ip address of signal generator'),
+        Parameter('ip_address', '169.254.146.198', str, 'ip address of signal generator'),
         Parameter('enable_output', False, bool, 'Type-N output enabled'),
         Parameter('frequency', 3e9, float, 'frequency in Hz, or with label in other units ex 300 MHz'),
         Parameter('amplitude', -60, float, 'Type-N amplitude in dBm'),
@@ -41,17 +53,16 @@ class MicrowaveGenerator(Device):
 
         super(MicrowaveGenerator, self).__init__(name, settings)
         #super().__init__(name,settings)
-        #if settings:
-        #    self.update(settings)
+
         # XXXXX MW ISSUE = START
         #===========================================
         # Issue where visa.ResourceManager() takes 4 minutes no longer happens after using pdb to debug (??? not sure why???)
         if self.settings['connection_type'] == 'LAN':
-            self.addr = (settings['ip_address'],settings['port'])
+            self.addr = (self.settings['ip_address'], self.settings['port'])
             try:
                 self._lan_command('*IDN?')
-            except (socket.error, socket.timeout) as e:
-                print('No Microwave Controller Detected!. Check that you are using the correct communication type', e)
+            except socket.error:
+                print('No Microwave Controller Detected!. Check that you are using the correct communication type')
                 raise
             except Exception as e:
                 raise (e)
@@ -62,7 +73,7 @@ class MicrowaveGenerator(Device):
                 print('No Microwave Controller Detected!. Check that you are using the correct communication type')
                 raise
             except Exception as e:
-                raise(e)
+                raise (e)
         #XXXXX MW ISSUE = END
         #===========================================
 
@@ -107,20 +118,23 @@ class MicrowaveGenerator(Device):
         """
         super(MicrowaveGenerator, self).update(settings)
         #super().update(settings)
+        # print(self.settings)
         # XXXXX MW ISSUE = START
         # ===========================================
         for key, value in settings.items():
-            if key == 'connection_type' and (value == 'GPIB' or 'RS232'):
+            if key == 'connection_type' and (value == 'GPIB' or value == 'RS232'):
                 self._connect()
+            elif key == 'connection_type' and value == 'LAN':
+                return None #if connection is LAN code uses socket to send command and doesnt need to go through _connect() method
             elif not (key == 'port' or key == 'GPIB_num'):
-                if self.settings.valid_values[key] == bool: #converts booleans, which are more natural to store for on/off, to
-                    value = int(value)                #the integers used internally in the SRS
+                if self.settings.valid_values[key] == bool:  # converts booleans, which are more natural to store for on/off, to
+                    value = int(value)  # the integers used internally in the SRS
                 elif key == 'modulation_type':
                     value = self._mod_type_to_internal(value)
                 elif key == 'modulation_function':
                     value = self._mod_func_to_internal(value)
                 elif key == 'pulse_modulation_function':
-                    value = self._pulse_mod_func_to_internal
+                    value = self._pulse_mod_func_to_internal(value)
                 # elif key == 'frequency':
                 #     if value > RANGE_MAX or value < RANGE_MIN:
                 #         raise ValueError("Invalid frequency. All frequencies must be between 2.025 GHz and 4.050 GHz.")
@@ -131,12 +145,12 @@ class MicrowaveGenerator(Device):
                     if self.settings['connection_type'] == 'LAN':
                         self._lan_command(key + ' ' + str(value))
                     elif self.settings['connection_type'] == 'GPIB' or 'RS232':
-                        self.srs.write(key + ' ' + str(value)) # frequency change operation timed using timeit.timeit and
-                                                           # completion confirmed by query('*OPC?'), found delay of <10ms
+                        self.srs.write(key + ' ' + str(value))  # frequency change operation timed using timeit.timeit and
+                        # completion confirmed by query('*OPC?'), found delay of <10ms
                     # ER 20180904
-                   # if key == 'FREQ':
-                   #     print('frequency set to: ', float(self.srs.query('FREQ?')))
-                    # print(self.srs.query('*OPC?'))
+                # if key == 'FREQ':
+                #     print('frequency set to: ', float(self.srs.query('FREQ?')))
+                # print(self.srs.query('*OPC?'))
 
         # XXXXX MW ISSUE = END
         # ===========================================
@@ -158,10 +172,10 @@ class MicrowaveGenerator(Device):
 
     def read_probes(self, key):
         # assert hasattr(self, 'srs') #will cause read_probes to fail if connection not yet established, such as when called in init
-        assert(self._settings_initialized) #will cause read_probes to fail if settings (and thus also connection) not yet initialized
+        assert (self._settings_initialized)  # will cause read_probes to fail if settings (and thus also connection) not yet initialized
         assert key in list(self._PROBES.keys())
 
-        #query always returns string, need to cast to proper return type
+        # query always returns string, need to cast to proper return type
         if key in ['enable_output', 'enable_rf_output', 'enable_modulation']:
             key_internal = self._param_to_internal(key)
             if self.settings['connection_type'] == 'LAN':
@@ -199,16 +213,16 @@ class MicrowaveGenerator(Device):
             try:
                 self._lan_command('*IDN?')  # arbitrary call to check connection, throws exception on failure to get response
                 return True
-            except (socket.error, socket.timeout):
+            except socket.error:
                 return False
         elif self.settings['connection_type'] == 'GPIB' or 'RS232':
             try:
-                self.srs.query('*IDN?') # arbitrary call to check connection, throws exception on failure to get response
+                self.srs.query('*IDN?')  # arbitrary call to check connection, throws exception on failure to get response
                 return True
             except pyvisa.errors.VisaIOError:
                 return False
 
-    def close(self):        #dont need close for ethernet connection
+    def close(self):  # dont need close for ethernet connection
         if self.settings['connection_type'] == 'LAN':
             pass
         elif self.settings['connection_type'] == 'GPIB' or 'RS232':
@@ -357,7 +371,7 @@ class RFGenerator(MicrowaveGenerator):
 
     _DEFAULT_SETTINGS = Parameter([
         Parameter('connection_type', 'LAN', ['GPIB', 'RS232', 'LAN'], 'type of connection to open to controller'),
-        Parameter('port', 5025, int, 'GPIB or COM port or LAN port on which to connect'),
+        Parameter('port', 5025, int, 'GPIB, COM, or LAN port on which to connect'),
         ## JG: what out for the ports this might be different on each computer and might cause issues when running export default
         Parameter('GPIB_num', 0, int, 'GPIB device on which to connect'),
         Parameter('ip_address', '169.254.146.198', str, 'ip address of signal generator'),
@@ -390,7 +404,9 @@ class RFGenerator(MicrowaveGenerator):
         }
 
 if __name__ == '__main__':
-
-    mw = MicrowaveGenerator()
+    mw = MicrowaveGenerator(settings={'connection_type':'LAN'})
     print(mw.is_connected)
+    mw.update({'frequency':2e9})
     print("Frequency is {} Hz".format(mw.read_probes('frequency')))
+    mw.close()
+
