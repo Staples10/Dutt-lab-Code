@@ -72,9 +72,18 @@ class ConfocalScan(Experiment):
 
         #arrays for position and counts at each position might need to add indeies i,j to correlate
         self.x_data = np.zeros(len(x_array))
-        self.y_data = np.zeros(len(y_array))
+        self.y_data = np.zeros((len(x_array),len(y_array)))
         self.count_data = np.zeros((len(x_array),len(y_array)))
         #self.data['description'] should be used instead of seting new data names
+
+        self.data['x_pos'] = None
+        self.data['y_pos'] = None
+        self.data['counts'] = None
+        self.data['counts_img'] = None
+        x_data = []
+        y_data = []
+        count_data = []
+
 
 
         i = 0    #index to have position matrix and count matrix line up
@@ -82,32 +91,40 @@ class ConfocalScan(Experiment):
 
         #want time_per_pt = full adwin counting and clear cycle (2 lines)
         #time_per_pt = 2 * (delay * 3.3ns)
-        adwin_delay = self.settings['time_per_pt'] / (2*3.3e-9)
-        self.adw.update({'process_1':{'delay':1212,'start':True}})
-        print('process: ', self.adw.read_probes('process_status', id=1))
-        print('nd connectd: ',self.nd.is_connected)
+        adwin_delay = int(self.settings['time_per_pt'] / (2*3.3e-9))    #delay value needs to be an integer. Could use round instead. This may make it better to use another form of count/ position coorilation
+        self.adw.update({'process_1':{'delay':adwin_delay,'start':True}})
+        #print('process: ', self.adw.read_probes('process_status', id=1))
+        #print('nd connectd: ',self.nd.is_connected)
 
         #set inital x and y and set nanodrive stage to that position
         x = self.settings['point_a']['x']
         y = self.settings['point_a']['y']
         self.nd.update({'x_pos':x,'y_pos':y})
-        sleep(0.1)  #time for stage to move and adwin process to initilize
+        sleep(0.1)  #time for stage to move to starting posiition and adwin process to initilize
 
-        #crashes after sending first x cord to nd maybe cause window trys to plot but plotting isnt set up
+
         while x <= self.settings['point_b']['x']:
             self.nd.update({'x_pos':x})
             sleep(0.01)
             x_pos = self.nd.read_probes('x_pos')
-            self.x_data[i] = x_pos
+            #self.x_data[i] = x_pos
+            x_data.append(x_pos)
+            self.data = {'x_pos':x_data}
 
             while y <= self.settings['point_b']['y']:
                 self.nd.update({'y_pos':y})
                 sleep(0.01)
                 y_pos = self.nd.read_probes('y_pos')
-                self.y_data[j] = y_pos
+                #self.y_data[i][j] = y_pos
+                y_data.append(y_pos)
+                self.data = {'y_pos':y_data}
+
+
                 sleep(self.settings['time_per_pt']*10e-6)   #sleep time for counts at each point. Need to find a reliable way to time
                 counts = self.adw.read_probes('int_var',id=1)
-                self.count_data[i][j] = counts
+                #self.count_data[i][j] = counts
+                count_data.append(counts)
+                self.data = {'counts':count_data}
                 y = y + step
                 j = j + 1
 
@@ -117,34 +134,38 @@ class ConfocalScan(Experiment):
             i = i + 1
             j = 0
 
-        print('Position Data: ','\n',self.x_data,'\n',self.y_data)
-        print('Counts: ','\n',self.count_data)
+        self.data = {'x_pos': x_data}
+        self.data = {'y_pos': y_data}
+        self.data = {'counts': count_data}
+        print('self.data: ',self.data)
+        #print('Position Data: ','\n',self.x_data,'\n',self.y_data)
+        #print('Counts: ','\n',self.count_data)
 
-        '''
-         for x in x_array:
-            print('updating nd')
-            self.nd.update({'x_pos':x})
-            sleep(0.1)
-            print('reading probes')
-            x_pos = self.nd.read_probes('x_pos')
-            self.x_data[i] = x_pos
-            print('added to data')
+        Nx = int(np.sqrt(len(self.data['counts'])))
+        count_img = np.array(self.data['counts'][0:Nx**2])
+        count_img = count_img.reshape((Nx, Nx))
 
-            for y in y_array:
-                self.nd.update({'y_pos':y})
-                sleep(0.1)
-                y_pos = self.nd.read_probes('y_pos')
-                self.y_data[j] = y_pos
-                print('updated nd y')
+        # line to call update function in experiment parent class and triggers _plot in this class
+        self.data.update({'count_img':count_img})
 
-                counts = self.adw.read_probes('int_var',id=1)
-                self.count_data[i][j] = counts
-                print('read counts')
-                j = j + 1
 
-            i = i + 1
-            j = 0
-        '''
+    def _plot(self, axes_list, data=None):
+
+        if data is None:
+            data = self.data
+
+        if data is not None and data is not{}:
+            fig = axes_list[0].get_figure(0)
+            extent = [self.settings['point_a']['x'],self.settings['point_b']['x'],self.settings['point_a']['y'],self.settings['point_b']['y']]
+            implot = axes_list[0].imshow(data['count_img'],cmap='pink', interpolation='nearest', extent=extent)
+            fig.colorbar(implot, label='counts/sec')
+
+    def _update(self,axes_list):
+        implot = axes_list[0].get_images()[0]
+        implot.set_data(self.data['counts'])
+
+        colorbar = implot.colorbar
+
 
 
 
